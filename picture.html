@@ -65,15 +65,22 @@ img{
   border-radius:10px;
 }
 
-/* ✅ input invisible MAIS fonctionnel mobile */
 #cameraInput{
   position:absolute;
   opacity:0;
   width:0;
   height:0;
 }
-</style>
 
+#result{
+  margin-top:15px;
+  font-size:14px;
+  background:#ecf0f1;
+  padding:10px;
+  border-radius:8px;
+  white-space:pre-wrap;
+}
+</style>
 </head>
 
 <body>
@@ -100,6 +107,8 @@ img{
   <button class="smart-btn" onclick="convertToBD()">📊 Convert to BD-PI-B03</button>
 </div>
 
+<div id="result"></div>
+
 </div>
 </div>
 
@@ -111,21 +120,25 @@ function openCamera(){
   document.getElementById("cameraInput").click();
 }
 
-/* ✅ EVENT CAMÉRA (FIABLE) */
+/* ✅ CAMERA */
 document.getElementById("cameraInput").addEventListener("change", function(e){
 
   const file = e.target.files[0];
   if(!file) return;
 
-  const url = URL.createObjectURL(file);
+  const reader = new FileReader();
 
-  imageData = url;
+  reader.onload = function(e){
+    imageData = e.target.result;
 
-  const preview = document.getElementById("preview");
-  preview.src = url;
-  preview.style.display = "block";
+    const preview = document.getElementById("preview");
+    preview.src = imageData;
+    preview.style.display = "block";
 
-  document.getElementById("actions").style.display = "block";
+    document.getElementById("actions").style.display = "block";
+  };
+
+  reader.readAsDataURL(file);
 });
 
 /* ✅ RETAKE */
@@ -133,18 +146,18 @@ function retake(){
   document.getElementById("preview").style.display = "none";
   document.getElementById("actions").style.display = "none";
   document.getElementById("cameraInput").value = "";
+  document.getElementById("result").innerText = "";
 }
 
-/* ✅ SAVE SIMPLE */
+/* ✅ SAVE */
 function saveImage(){
-
   const link = document.createElement('a');
   link.href = imageData;
   link.download = "RunAtRate.jpg";
   link.click();
 }
 
-/* ✅ OCR SAFE (ne casse rien) */
+/* ✅ OCR + PARSING */
 async function convertToBD(){
 
   if(!imageData){
@@ -152,10 +165,58 @@ async function convertToBD(){
     return;
   }
 
-  alert("OCR coming next step ✅");
+  document.getElementById("result").innerText = "Reading board...";
 
-  // 👉 volontairement vide pour ne pas casser la caméra
-  // prochaine étape = OCR + parsing
+  try{
+
+    const response = await fetch("https://api.ocr.space/parse/image", {
+      method: "POST",
+      body: new URLSearchParams({
+        base64Image: imageData,
+        language: "eng"
+      }),
+      headers: {
+        apikey: "helloworld"
+      }
+    });
+
+    const data = await response.json();
+
+    if(!data.ParsedResults){
+      document.getElementById("result").innerText = "OCR failed ❌";
+      return;
+    }
+
+    const text = data.ParsedResults[0].ParsedText;
+
+    console.log("OCR TEXT:", text);
+
+    /* ✅ PARSING INTELLIGENT (simple) */
+    const targetPPH = text.match(/target.*?(\d+)/i)?.[1] || "N/A";
+    const okParts = text.match(/ok.*?(\d+)/i)?.[1] || "N/A";
+    const ngParts = text.match(/ng|scrap.*?(\d+)/i)?.[1] || "N/A";
+    const downtime = text.match(/down.*?(\d+)/i)?.[1] || "N/A";
+
+    document.getElementById("result").innerText =
+`✅ OCR RESULT
+
+------------------------
+RAW TEXT:
+${text}
+
+------------------------
+DETECTED:
+
+Target PPH: ${targetPPH}
+OK parts: ${okParts}
+NG parts: ${ngParts}
+Downtime: ${downtime}
+`;
+
+  }catch(e){
+    document.getElementById("result").innerText = "Error OCR ❌";
+    console.error(e);
+  }
 }
 
 </script>
