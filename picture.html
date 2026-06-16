@@ -3,6 +3,9 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!-- ✅ OpenCV (scan) -->
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+
 <style>
 body{
   font-family:Arial;
@@ -56,6 +59,7 @@ button{
 
 .take-btn{background:#1f5aa6;color:white;}
 .retry-btn{background:#e67e22;color:white;}
+.scan-btn{background:#9b59b6;color:white;}
 .pdf-btn{background:#2ecc71;color:white;}
 .smart-btn{background:#34495e;color:white;}
 
@@ -103,6 +107,7 @@ img{
 
 <div id="actions" style="display:none">
   <button class="retry-btn" onclick="retake()">🔁 RETAKE</button>
+  <button class="scan-btn" onclick="scanImage()">📄 SCAN IMAGE</button>
   <button class="pdf-btn" onclick="saveImage()">💾 SAVE IMAGE</button>
   <button class="smart-btn" onclick="convertToBD()">📊 Convert to BD-PI-B03</button>
 </div>
@@ -157,7 +162,61 @@ function saveImage(){
   link.click();
 }
 
-/* ✅ OCR + PARSING */
+/* ✅ SCAN (effet document) */
+function scanImage(){
+
+  if(!imageData){
+    alert("Take picture first");
+    return;
+  }
+
+  if(typeof cv === "undefined"){
+    alert("OpenCV not ready...");
+    return;
+  }
+
+  const img = new Image();
+  img.src = imageData;
+
+  img.onload = function(){
+
+    let canvas = document.createElement("canvas");
+    let ctx = canvas.getContext("2d");
+
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    ctx.drawImage(img,0,0);
+
+    let src = cv.imread(canvas);
+    let gray = new cv.Mat();
+    let thresh = new cv.Mat();
+
+    // ✅ gris
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+    // ✅ contraste fort (scan look)
+    cv.adaptiveThreshold(
+      gray,
+      thresh,
+      255,
+      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+      cv.THRESH_BINARY,
+      11,
+      2
+    );
+
+    cv.imshow(canvas, thresh);
+
+    imageData = canvas.toDataURL("image/jpeg");
+
+    document.getElementById("preview").src = imageData;
+
+    src.delete(); gray.delete(); thresh.delete();
+  };
+}
+
+/* ✅ OCR */
 async function convertToBD(){
 
   if(!imageData){
@@ -175,9 +234,7 @@ async function convertToBD(){
         base64Image: imageData,
         language: "eng"
       }),
-      headers: {
-        apikey: "helloworld"
-      }
+      headers: { apikey: "helloworld" }
     });
 
     const data = await response.json();
@@ -189,9 +246,6 @@ async function convertToBD(){
 
     const text = data.ParsedResults[0].ParsedText;
 
-    console.log("OCR TEXT:", text);
-
-    /* ✅ PARSING INTELLIGENT (simple) */
     const targetPPH = text.match(/target.*?(\d+)/i)?.[1] || "N/A";
     const okParts = text.match(/ok.*?(\d+)/i)?.[1] || "N/A";
     const ngParts = text.match(/ng|scrap.*?(\d+)/i)?.[1] || "N/A";
@@ -200,22 +254,18 @@ async function convertToBD(){
     document.getElementById("result").innerText =
 `✅ OCR RESULT
 
-------------------------
-RAW TEXT:
 ${text}
 
-------------------------
-DETECTED:
+------------------
 
 Target PPH: ${targetPPH}
-OK parts: ${okParts}
-NG parts: ${ngParts}
+OK: ${okParts}
+NG: ${ngParts}
 Downtime: ${downtime}
 `;
 
   }catch(e){
     document.getElementById("result").innerText = "Error OCR ❌";
-    console.error(e);
   }
 }
 
