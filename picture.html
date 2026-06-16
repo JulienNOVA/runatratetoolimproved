@@ -8,13 +8,43 @@ body{
   font-family:Arial;
   margin:0;
   background:#f5f7fa;
-  text-align:center;
+}
+
+.header{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px;
+  background:white;
+  border-bottom:3px solid #1f5aa6;
+}
+
+.header img{height:40px;}
+
+.header-title{
+  font-weight:bold;
+  color:#1f5aa6;
 }
 
 .container{
-  padding:20px;
+  max-width:500px;
+  margin:auto;
+  padding:15px;
 }
 
+.card{
+  background:white;
+  padding:15px;
+  border-radius:10px;
+  margin-top:15px;
+}
+
+h2{
+  text-align:center;
+  color:#1f5aa6;
+}
+
+/* Boutons */
 button{
   padding:15px;
   border:none;
@@ -22,6 +52,7 @@ button{
   font-size:16px;
   width:100%;
   margin-top:10px;
+  font-weight:bold;
 }
 
 .take-btn{background:#1f5aa6;color:white;}
@@ -34,32 +65,46 @@ img{
   margin-top:15px;
   border-radius:10px;
 }
-</style>
 
+#result{
+  margin-top:15px;
+  font-size:14px;
+  background:#ecf0f1;
+  padding:10px;
+  border-radius:8px;
+  white-space:pre-wrap;
+}
+</style>
 </head>
 
 <body>
 
+<!-- HEADER -->
+<div class="header">
+  <img src="https://www.cfnews.net/var/cfnews/storage/images/_aliases/medium/mediatheque/hd/standard-hd/logos/novares-art-logo-2019/1372329-3-fre-FR/Novares-ART-Logo-2019.png">
+  <div class="header-title">Run@Rate Tool</div>
+</div>
+
 <div class="container">
+<div class="card">
 
 <h2>R@R Picture</h2>
 
-<!-- BUTTON TAKE -->
 <button class="take-btn" onclick="openCamera()">📷 TAKE PICTURE</button>
 
-<!-- INPUT CAMERA (hidden) -->
 <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
 
-<!-- IMAGE PREVIEW -->
 <img id="preview" style="display:none"/>
 
-<!-- ACTION BUTTONS -->
 <div id="actions" style="display:none">
   <button class="retry-btn" onclick="retake()">🔁 RETAKE</button>
   <button class="pdf-btn" onclick="savePDF()">📄 SAVE AS PDF</button>
-  <button class="smart-btn" onclick="generateSmart()">📊 BD-PD SMARTSHEET</button>
+  <button class="smart-btn" onclick="convertToBD()">📊 Convert to BD-PI-B03</button>
 </div>
 
+<div id="result"></div>
+
+</div>
 </div>
 
 <script>
@@ -113,20 +158,49 @@ function savePDF(){
     ctx.drawImage(img,0,0);
 
     const link = document.createElement('a');
-    link.download = "RunAtRate_Image.pdf";
-
-    // convert canvas → image → fake PDF download (simple trick)
+    link.download = "RunAtRate_Image.jpg";
     link.href = canvas.toDataURL("image/jpeg");
-
     link.click();
   };
 }
 
-function generateSmart(){
-  alert("👉 BD-PD Smartsheet export à connecter (API / Excel / Power Automate)");
-}
+/* ✅ OCR + parsing */
+async function convertToBD(){
 
-</script>
+  if(!imageData){
+    alert("Take a picture first");
+    return;
+  }
 
-</body>
-</html>
+  document.getElementById("result").innerText = "Reading board...";
+
+  const response = await fetch("https://api.ocr.space/parse/image", {
+    method: "POST",
+    body: new URLSearchParams({
+      base64Image: imageData,
+      language: "eng"
+    }),
+    headers: {
+      apikey: "helloworld"
+    }
+  });
+
+  const result = await response.json();
+
+  if(!result.ParsedResults){
+    document.getElementById("result").innerText = "OCR failed ❌";
+    return;
+  }
+
+  const text = result.ParsedResults[0].ParsedText;
+
+  console.log("OCR TEXT:", text);
+
+  /* ✅ PARSING BASIQUE */
+  const targetPPH = text.match(/Target.*?(\d+)/i)?.[1] || "N/A";
+  const okParts = text.match(/OK.*?(\d+)/i)?.[1] || "N/A";
+  const ngParts = text.match(/NG|Scrap.*?(\d+)/i)?.[1] || "N/A";
+  const downtime = text.match(/Downtime.*?(\d+)/i)?.[1] || "N/A";
+
+  document.getElementById("result").innerText =
+`
